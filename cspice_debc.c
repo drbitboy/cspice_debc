@@ -93,43 +93,59 @@ typedef enum
 #define ctab '\t'
 
 int main(int argc, char** argv) {
+
+/* Input and output filenames; "-" is stdin or stdout */
 char* fnIn = { "-" };
 char* fnOut = { "-" };
 
+/* Input and output FILE*s */
 FILE* fIn = stdin;
 FILE* fOut = stdout;
 
-int bufferLen;
+/* Input buffer to store characters from input FILE* */
 char inBuffer[2048];
-char* pCurrentChar;
-char* pNextChar;
 
+/* Pointer to most recently read character in input buffer */
+/* Value of the most recently read character */
+char* pCurrentChar;
 int currentChar;
 
+/* Pointer to where to place the next character read in */
+char* pNextChar;
+
+/* Pointers to start and stop in input buffer of calculated index */
 char* pStartIndex;
 char* pStopIndex;
 
+/* Pointers to use input buffer storage for input */
 char* pStartBackup;
 char* pStopBackup;
 
+/* Keep track of depth of parentheses () and brackets [] */
 int parenDepth;
 int bracketDepth;
-int savedBracketDepth;
-int savedParenDepth;
 
+/* Saved depths at start of parsing */
+int savedParenDepth;
+int savedBracketDepth;
+
+/* Single character stack; highest priority alternate input */
 int pushedChar;
 int usePushedChar;
 
-int tabCount;
+/* State storage */
 
+/* - Two states enum:  bounds check; newline handling */
 typedef enum
 { STATE_BOUNDSCHECK_SEQ = 0
 , STATE_NEWLINE_SEQ
 , STATE_COUNT_SEQ
 } STATE_SEQ;
 
+/* - Two state variables */
 ENUM_WANT state[STATE_COUNT_SEQ];
 
+/* - Which state variable is currently active */
 STATE_SEQ stateDepth;
 
 
@@ -144,7 +160,7 @@ STATE_SEQ stateDepth;
   /* fprintf(stderr,"%s is open for writing\n", fnOut); */
 
 
-  /* Initialize */
+  /* Macro to reset state when parsing fails */
 
 # define DOFULLRESET \
   { \
@@ -152,12 +168,24 @@ STATE_SEQ stateDepth;
       \
       if (!pStartBackup && !pStopBackup && !stateDepth && state[0] > WANTfirstEqual) { \
       int saveChar; \
+        \
+        /* If parsing got to the first equals sign, */ \
+        /* then set backup input start to 5-byte offset from start of */ \
+        /* buffer, set backup input end of buffered chars (pNextChar), */ \
+        /* and write first five byes of buffer >>>(i__N<<< to fOut */ \
+        \
         pStartBackup = inBuffer + 5; \
         pStopBackup = pNextChar; \
         fwrite(inBuffer, sizeof(char), (size_t)(pStartBackup-inBuffer), fOut); \
+        \
+        /* Reset paren depth */ \
+        \
         parenDepth = savedParenDepth + 1; \
         \
+        /* Log what was done to stderr */ \
+        \
         saveChar = *pStartBackup; \
+        \
         *pStartBackup = '\0'; \
         fprintf(stderr,"%s:  Wrote %ld char%s; last is %02x[%c]; state[%d] = %d; savedBracket/bracket/parenDepth=%d/%d/%d\n>>>%s<<<\n" \
                       , argc>1 ? argv[1] : "[stdin]" \
@@ -175,9 +203,18 @@ STATE_SEQ stateDepth;
         *pStartBackup = saveChar; \
         *pNextChar = '\0'; \
         fprintf(stderr,"  - Full buffer=\n>>>%s<<<\n",inBuffer); \
+        \
       } else { \
+        \
+        /* Write all bytes, which have been read into buffer, to fOut */ \
+        \
         fwrite(inBuffer, sizeof(char), (size_t)(pNextChar-inBuffer), fOut); \
+        \
         if (stateDepth==STATE_NEWLINE_SEQ || state[stateDepth] > WANTfirstEqual) { \
+          \
+          /* If parsing got to the first equals sign, */ \
+          /* then log what was done to stderr */ \
+          \
           *pNextChar = '\0'; \
           fprintf(stderr,"%s:  Wrote %ld char%s; last is %02x[%c]; state[%d] = %d; savedBracket/bracket/parenDepth=%d/%d/%d\n>>>%s<<<\n" \
                         , argc>1 ? argv[1] : "[stdin]" \
@@ -192,46 +229,58 @@ STATE_SEQ stateDepth;
                         , parenDepth \
                         , inBuffer \
                  ); \
+          /* End of loggin */ \
         } \
       } \
     } \
+    /* Reset next character pointer to start of buffer, reset state */ \
     pNextChar = inBuffer; \
     state[stateDepth = STATE_BOUNDSCHECK_SEQ] = WANTfirstOpenParenOrBracket; \
   }
 
+/* NOTTICKED macro ensures none of '(', '['. ')' or ']' change paren or
+ * bracket depth
+ */
 # define BACKCHAR(N) (((pCurrentChar-(N)) >= inBuffer) ? pCurrentChar[N] : 0)
 # define LC1 BACKCHAR(-1)
 # define LC3 BACKCHAR(-3)
 # define LC4 BACKCHAR(-4)
 # define NOTTICKED (LC1==ctick ? (LC3==ctick ? 1 : (LC3==cbackslash && LC4==ctick ? 1 : 0)) : 1)
 
-  pStartBackup = 0;
-  pStopBackup = 0;
 
-  pNextChar = inBuffer;
-  DOFULLRESET
+  /* Initialize state variables */
 
+  /* Paren and bracket depth */
   bracketDepth = 0;
   parenDepth = 0;
 
-  usePushedChar = 1;
-  pushedChar = fgetc(fIn);
+  /* No input from backup storage */
+  pStartBackup = 0;
+  pStopBackup = 0;
 
-  /* Get next character */
-  //while ((*(pCurrentChar = pNextChar++) = currentChar = usePushedChar ? pushedChar : fgetc(fIn)) != EOF) {
-  while (EOF != ( *(pCurrentChar = pNextChar++) = currentChar = 
+  /* No input from pushed char */
+  usePushedChar = 0;
+
+  /* Next character goes to start of input buffer; use macro to reset 
+   * everything else
+   */
+  pNextChar = inBuffer;
+  DOFULLRESET
+
+  /* Get next character; exit on EOF */
+  while (EOF != ( *(pCurrentChar = pNextChar++) = currentChar =        /* Input character: */
                   ( usePushedChar
-                    ? pushedChar 
+                    ? ((usePushedChar=0), pushedChar)                  /* - First priority is from pushed char */
                     : ( (pStartBackup && (pStartBackup<pStopBackup))
-                        ? *(pStartBackup++)
-                        : ((pStartBackup=pStopBackup=0),fgetc(fIn))
+                        ? *(pStartBackup++)                            /* - Second priority is from backup storage from later (after pNextChar) in input buffer */
+                        : ((pStartBackup=pStopBackup=0),fgetc(fIn))    /* - Lowest priority is from fIn */
                       )
                   )
                 )
         ) {
-    usePushedChar = 0;
 
 #   if 0
+    /* Debug logging from backup storage */
     if (pStartBackup) {
       fprintf(stderr,"- Backup char %x[%c]\n", currentChar, (char)currentChar);
     }
@@ -242,7 +291,6 @@ STATE_SEQ stateDepth;
       switch (currentChar) {
       case cnl:
         state[stateDepth = STATE_NEWLINE_SEQ] = WANTtabOrFirstSpace;
-        tabCount = 0;
         break;
       default: break;
       }
@@ -288,8 +336,8 @@ STATE_SEQ stateDepth;
       DOFULLRESET break;
 
     case WANTi:
-      /* If currentChar is another open paren, the adjust saved paren
-       * depth & try again
+      /* If currentChar is another open paren, then adjust saved paren
+       * depth & repeat
        */
       if (currentChar==copenparen) {
         fputc(currentChar, fOut);
@@ -299,20 +347,24 @@ STATE_SEQ stateDepth;
       if (currentChar==ci) { ++state[stateDepth]; break; }
       DOFULLRESET break;
 
+    /* Two underscores */
     case WANT_first:
     case WANT_second:
       if (currentChar==c_) { ++state[stateDepth]; break; }
       DOFULLRESET break;
 
+    /* A digit [1:9] */
     case WANTnum:
       if (currentChar>=c1 && currentChar<=c9) { ++state[stateDepth]; break; }
       DOFULLRESET break;
 
+    /* A space, possibly preceeded by digits [0:9] */
     case WANTspaceAfterNum:
       if (currentChar==cspace) { ++state[stateDepth]; break; }
       if (currentChar>=c0 && currentChar<=c9) { break; }
       DOFULLRESET break;
 
+    /* The first equal sign */
     case WANTfirstEqual:
       if (currentChar==cequal) { ++state[stateDepth]; break; }
       DOFULLRESET break;
@@ -435,7 +487,7 @@ STATE_SEQ stateDepth;
 
       switch (currentChar) {
         /* If currentChar is a tab or a newline, then no change in state */
-        case ctab: ++tabCount; break;
+        case ctab: break;
         case cnl: break;
 
         /* If currentChar is a space, then it is either the start of a
@@ -448,7 +500,7 @@ STATE_SEQ stateDepth;
         default:
           /* - Otherwise:
            *
-           *   1) Put the currentChar back into fIn
+           *   1) Put the currentChar back into backup storage or fIn
            *   1.1) Reset buffer pointer
            *   1.2) Revert any paren depth change
            */
@@ -485,7 +537,7 @@ STATE_SEQ stateDepth;
 
       /* - Otherwise undo this character and that previous first space:
        *
-       *   1) Put the currentChar back into fIn
+       *   1) Put the currentChar back into backup storage or fIn
        *   1.1) Reset buffer pointer
        *   1.2) Revert any paren depth change
        */
