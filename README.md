@@ -2,10 +2,9 @@
 
 CSPICE source code DE-Bounds-Check
 
+Remove bounds checking from one F2Ced CSPICE \*[^\_]?.c routine
 
-cspice\_debc.c
-
-  Remove bounds checking from one F2Ced CSPICE \*[^\_]?.c routine
+- saves about 5% in runtime speed
 
 Usage (BASH):
 
