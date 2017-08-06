@@ -4,7 +4,7 @@ CSPICE source code DE-Bounds-Check
 
 Remove bounds checking from one F2Ced CSPICE \*[^\_]?.c routine
 
-- saves about 5% in runtime speed
+- saves about 5% in runtime speed for DSKX02 (Digital Shape Kernel intersection calculations)
 
 Usage (BASH):
 
