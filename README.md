@@ -9,23 +9,23 @@ cspice\_debc.c
 
 Usage (BASH):
 
-    ./cspice\_debc src/cspice/dskx02.c ./dskx02\_debc.c
+    ./cspice_debc src/cspice/dskx02.c ./dskx02_debc.c
 
 
-    \#\#\# CHDIR to CSPICE top level directory
+    ### CHDIR to CSPICE top level directory
     cd [.../]cspice
 
-    \#\#\# Move original CSPICE source (src/) to base\_src/
-    mv src base\_src
+    ### Move original CSPICE source (src/) to base_src/
+    mv src base_src
 
-    \#\#\# Duplicate original src/ sub-directory
-    rsync -a[v] base\_src/ src/ --exclude='\*\_c.c'
+    ### Duplicate original src/ sub-directory
+    rsync -a[v] base_src/ src/ --exclude='*_c.c'
 
-    \#\#\# DE-Bounds-Check CSPICE source from base\_src/cspice/ to src/cspice/
-    for C in base\_src/cspice/\*[^\_]?.c ; do
-        ./cspice\_debc "${C} | ./cspice\_debc | ./cspice\_debc - ${C\#base\_}
+    ### DE-Bounds-Check CSPICE source from base_src/cspice/ to src/cspice/
+    for C in base_src/cspice/*[^_]?.c ; do
+        ./cspice_debc "${C} | ./cspice_debc | ./cspice_debc - ${C#base_}
     done
 
-    \#\#\# Rebuild CSPICE libraries
+    ### Rebuild CSPICE libraries
     ./makeall.csh
 
