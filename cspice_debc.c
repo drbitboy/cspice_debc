@@ -147,7 +147,7 @@ STATE_SEQ stateDepth;
   { \
     if (pNextChar > inBuffer) { \
       fwrite(inBuffer, sizeof(char), (size_t)(pNextChar-inBuffer), fOut); \
-      if (stateDepth==STATE_NEWLINE_SEQ || state[stateDepth] == WANTfirstEqual) { \
+      if (stateDepth==STATE_NEWLINE_SEQ || state[stateDepth] > WANTfirstEqual) { \
         *pNextChar = '\0'; \
         fprintf(stderr,"%s:  Wrote %ld char%s; last is %02x[%c]; state[%d] = %d; savedBracket/bracket/parenDepth=%d/%d/%d\n>>>%s<<<\n" \
                       , argc>1 ? argv[1] : "[stdin]" \
