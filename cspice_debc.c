@@ -109,6 +109,9 @@ int currentChar;
 char* pStartIndex;
 char* pStopIndex;
 
+char* pStartBackup;
+char* pStopBackup;
+
 int parenDepth;
 int bracketDepth;
 int savedBracketDepth;
@@ -146,15 +149,22 @@ STATE_SEQ stateDepth;
 # define DOFULLRESET \
   { \
     if (pNextChar > inBuffer) { \
-      fwrite(inBuffer, sizeof(char), (size_t)(pNextChar-inBuffer), fOut); \
-      if (stateDepth==STATE_NEWLINE_SEQ || state[stateDepth] > WANTfirstEqual) { \
-        *pNextChar = '\0'; \
+      \
+      if (!pStartBackup && !pStopBackup && !stateDepth && state[0] > WANTfirstEqual) { \
+      int saveChar; \
+        pStartBackup = inBuffer + 5; \
+        pStopBackup = pNextChar; \
+        fwrite(inBuffer, sizeof(char), (size_t)(pStartBackup-inBuffer), fOut); \
+        parenDepth = savedParenDepth + 1; \
+        \
+        saveChar = *pStartBackup; \
+        *pStartBackup = '\0'; \
         fprintf(stderr,"%s:  Wrote %ld char%s; last is %02x[%c]; state[%d] = %d; savedBracket/bracket/parenDepth=%d/%d/%d\n>>>%s<<<\n" \
                       , argc>1 ? argv[1] : "[stdin]" \
-                      , (long)(pNextChar-inBuffer) \
-                      , (pNextChar-inBuffer)>1 ? "s" : "" \
-                      , (int)((unsigned char) pNextChar[-1]) \
-                      , pNextChar[-1] \
+                      , (long)(pStartBackup-inBuffer) \
+                      , (pStartBackup-inBuffer)>1 ? "s" : "" \
+                      , (int)((unsigned char) pStartBackup[-1]) \
+                      , pStartBackup[-1] \
                       , (int) stateDepth \
                       , (int) state[stateDepth] \
                       , savedBracketDepth \
@@ -162,6 +172,27 @@ STATE_SEQ stateDepth;
                       , parenDepth \
                       , inBuffer \
                ); \
+        *pStartBackup = saveChar; \
+        *pNextChar = '\0'; \
+        fprintf(stderr,"  - Full buffer=\n>>>%s<<<\n",inBuffer); \
+      } else { \
+        fwrite(inBuffer, sizeof(char), (size_t)(pNextChar-inBuffer), fOut); \
+        if (stateDepth==STATE_NEWLINE_SEQ || state[stateDepth] > WANTfirstEqual) { \
+          *pNextChar = '\0'; \
+          fprintf(stderr,"%s:  Wrote %ld char%s; last is %02x[%c]; state[%d] = %d; savedBracket/bracket/parenDepth=%d/%d/%d\n>>>%s<<<\n" \
+                        , argc>1 ? argv[1] : "[stdin]" \
+                        , (long)(pNextChar-inBuffer) \
+                        , (pNextChar-inBuffer)>1 ? "s" : "" \
+                        , (int)((unsigned char) pNextChar[-1]) \
+                        , pNextChar[-1] \
+                        , (int) stateDepth \
+                        , (int) state[stateDepth] \
+                        , savedBracketDepth \
+                        , bracketDepth \
+                        , parenDepth \
+                        , inBuffer \
+                 ); \
+        } \
       } \
     } \
     pNextChar = inBuffer; \
@@ -174,6 +205,9 @@ STATE_SEQ stateDepth;
 # define LC4 BACKCHAR(-4)
 # define NOTTICKED (LC1==ctick ? (LC3==ctick ? 1 : (LC3==cbackslash && LC4==ctick ? 1 : 0)) : 1)
 
+  pStartBackup = 0;
+  pStopBackup = 0;
+
   pNextChar = inBuffer;
   DOFULLRESET
 
@@ -185,8 +219,23 @@ STATE_SEQ stateDepth;
 
   /* Get next character */
   //while ((*(pCurrentChar = pNextChar++) = currentChar = usePushedChar ? pushedChar : fgetc(fIn)) != EOF) {
-  while (EOF != (*(pCurrentChar = pNextChar++) = currentChar = (usePushedChar ? pushedChar : fgetc(fIn)))) {
+  while (EOF != ( *(pCurrentChar = pNextChar++) = currentChar = 
+                  ( usePushedChar
+                    ? pushedChar 
+                    : ( (pStartBackup && (pStartBackup<pStopBackup))
+                        ? *(pStartBackup++)
+                        : ((pStartBackup=pStopBackup=0),fgetc(fIn))
+                      )
+                  )
+                )
+        ) {
     usePushedChar = 0;
+
+#   if 0
+    if (pStartBackup) {
+      fprintf(stderr,"- Backup char %x[%c]\n", currentChar, (char)currentChar);
+    }
+#   endif
 
     /* IFF currently parsing a bounds check, then start a newline check */
     if (stateDepth==STATE_BOUNDSCHECK_SEQ && (state[stateDepth] != WANTfirstOpenParenOrBracket)) {
@@ -380,6 +429,7 @@ STATE_SEQ stateDepth;
       break;
 
 
+    /******************************************************************/
     /* After newline, somewhere in bounds-check sequence above */
     case WANTtabOrFirstSpace:
 
@@ -402,7 +452,11 @@ STATE_SEQ stateDepth;
            *   1.1) Reset buffer pointer
            *   1.2) Revert any paren depth change
            */
-          ungetc(currentChar,fIn); 
+          if (pStartBackup && pStartBackup<=pStopBackup) {
+            --pStartBackup;
+          } else {
+            ungetc(currentChar,fIn); 
+          }
           --pNextChar;
 
           switch (currentChar) {
@@ -435,7 +489,11 @@ STATE_SEQ stateDepth;
        *   1.1) Reset buffer pointer
        *   1.2) Revert any paren depth change
        */
-      ungetc(currentChar,fIn); 
+      if (pStartBackup && pStartBackup<=pStopBackup) {
+        --pStartBackup;
+      } else {
+        ungetc(currentChar,fIn); 
+      }
       --pNextChar;
 
       switch (currentChar) {
